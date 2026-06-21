@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PolyTrack Shareable Sandbox</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #a3d2e2; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; user-select: none; }
+        #canvas-container { width: 100vw; height: 100vh; }
+        
+        .hud-panel { position: absolute; padding: 15px; background: rgba(20, 20, 25, 0.85); color: #fff; border-radius: 10px; backdrop-filter: blur(5px); box-shadow: 0 4px 15px rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); }
+        #stats-panel { top: 20px; left: 20px; min-width: 150px; }
+        #control-panel { top: 20px; right: 20px; text-align: right; }
+        #editor-panel { bottom: 20px; left: 50%; transform: translateX(-50%); display: none; flex-direction: column; align-items: center; gap: 10px; width: 90%; max-width: 500px; }
+        
+        .hud-title { font-size: 12px; text-transform: uppercase; letter-spacing: 2px; color: #8a99ad; margin-bottom: 5px; }
+        .hud-value { font-size: 28px; font-weight: 800; font-family: monospace; color: #00ffcc; }
+        
+        .btn { background: #3a4750; border: none; color: white; padding: 10px 20px; font-size: 14px; font-weight: bold; border-radius: 5px; cursor: pointer; transition: all 0.2s; text-transform: uppercase; }
+        .btn:hover { background: #00ffcc; color: #141419; }
+        .btn.active { background: #ff4757; color: white; }
+        .btn-share { background: #1e90ff; font-size: 11px; padding: 6px 12px; margin-left: 5px; }
+        .btn-share:hover { background: #00ffcc; color: #141419; }
+        
+        .editor-row { display: flex; gap: 10px; align-items: center; width: 100%; justify-content: space-between; }
+        .color-picker-wrap { display: flex; gap: 5px; }
+        .color-dot { width: 25px; height: 25px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; }
+        .color-dot.selected { border-color: #fff; transform: scale(1.1); }
+        
+        #file-input { display: none; }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+    <div id="canvas-container"></div>
+    <input type="file" id="file-input" accept=".json">
+
+    <div id="stats-panel" class="hud-panel">
+        <div class="hud-title">Speed</div>
+        <div id="speedo" class="hud-value">0 <span style="font-size:14px; color:#fff;">km/h</span></div>
+        <div class="hud-title" style="margin-top: 10px;">Mode</div>
+        <div id="mode-tag" style="color: #ff4757; font-weight: bold; text-transform: uppercase; font-size: 14px;">Racing</div>
+    </div>
+
+    <div id="control-panel" class="hud-panel">
+        <button id="toggle-mode-btn" class="btn">Switch to Build Mode</button>
+        <div style="margin-top: 8px;">
+            <button id="export-btn" class="btn btn-share">Export Track</button>
+            <button id="import-btn" class="btn btn-share" style="background:#2ed573;">Import Track</button>
+        </div>
+        <div style="font-size: 11px; color: #aaa; margin-top: 8px;">[W,A,S,D] Drive | [R] Reset | Build: [Right-Click + Drag] Pan Map</div>
+    </div>
+
+    <div id="editor-panel" class="hud-panel">
+        <div class="editor-row">
+            <button id="prev-tile" class="btn" style="padding: 5px 12px;">&lt;</button>
+            <div style="text-align: center;">
+                <div class="hud-title">Selected Piece</div>
+                <div id="tile-name" style="font-weight: bold; font-size: 16px; color:#00ffcc;">Straight Track</div>
+            </div>
+            <button id="next-tile" class="btn" style="padding: 5px 12px;">&gt;</button>
+            <button id="rotate-tile" class="btn" style="background:#2f3542;">Rotate [Space]</button>
+        </div>
+        <div class="editor-row" style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 8px;">
+            <span class="hud-title">Car Paint:</span>
+            <div class="color-picker-wrap">
+                <div class="color-dot selected" style="background: #ff4757;" data-color="0xff4757"></div>
+                <div class="color-dot" style="background: #2ed573;" data-color="0x2ed573"></div>
+                <div class="color-dot" style="background: #1e90ff;" data-color="0x1e90ff"></div>
+                <div class="color-dot" style="background: #ffa502;" data-color="0xffa502"></div>
+                <div class="color-dot" style="background: #ffffff;" data-color="0xffffff"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- GAME STATE ---
+        let isBuildMode = false;
+        const TILE_SIZE = 20;
+        let currentTileType = 0; 
+        let currentTileRotation = 0; 
+        let trackData = {}; 
+
+        // Camera Pan System Coordinates
+        let cameraOffset = new THREE.Vector3(0, 0, 0);
+        let isRightDragging = false;
+        let previousMousePosition = { x: 0, y: 0 };
+
+        const tileTypes = [
+            { name: "Straight Track", color: 0x2f3542 },
+            { name: "90° Left Turn", color: 0x2f3542 },
+            { name: "Big Air Ramp", color: 0x57606f },
+            { name: "Neon Boost Pad", color: 0x00ffcc }
+        ];
+
+        // --- THREE.JS SETUP ---
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xa3d2e2);
+        scene.fog = new THREE.FogExp2(0xa3d2e2, 0.005);
+
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        container.appendChild(renderer.domElement);
+
+        // Lights
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+        scene.add(ambientLight);
+        const sunLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        sunLight.position.set(100, 150, 50);
+        sunLight.castShadow = true;
+        scene.add(sunLight);
+
+        // Ground Mesh Setup
+        const gridHelper = new THREE.GridHelper(1000, 50, 0xffffff, 0xffffff);
+        gridHelper.position.y = 0.1;
+        gridHelper.material.opacity = 0.2;
+        gridHelper.material.transparent = true;
+        scene.add(gridHelper);
+
+        const buildPlanesGeo = new THREE.PlaneGeometry(2000, 2000);
+        buildPlanesGeo.rotateX(-Math.PI/2);
+        const buildFloor = new THREE.Mesh(buildPlanesGeo, new THREE.MeshBasicMaterial({visible: false}));
+        scene.add(buildFloor);
+
+        const groundGeo = new THREE.PlaneGeometry(2000, 2000);
+        const groundMat = new THREE.MeshStandardMaterial({ color: 0x6ab04c, roughness: 0.9 });
+        const ground = new THREE.Mesh(groundGeo, groundMat);
+        ground.rotation.x = -Math.PI/2;
+        ground.receiveShadow = true;
+        scene.add(ground);
+
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+
+        // Target Ghost Preview Block
+        const previewGeo = new THREE.BoxGeometry(TILE_SIZE, 1, TILE_SIZE);
+        const previewMat = new THREE.MeshBasicMaterial({ color: 0x00ffcc, transparent: true, opacity: 0.4 });
+        const previewMesh = new THREE.Mesh(previewGeo, previewMat);
+        previewMesh.visible = false;
+        scene.add(previewMesh);
+
+        // --- TILE GENERATOR ---
+        function createTileMesh(type, rotation) {
+            const tileGroup = new THREE.Group();
+            const baseMat = new THREE.MeshStandardMaterial({ color: tileTypes[type].color, roughness: 0.5 });
+            let mainMesh;
+
+            if (type === 0 || type === 3) { 
+                mainMesh = new THREE.Mesh(new THREE.BoxGeometry(TILE_SIZE, 0.6, TILE_SIZE), baseMat);
+                if (type === 3) { 
+                    const strip = new THREE.Mesh(new THREE.BoxGeometry(TILE_SIZE, 0.7, 2), new THREE.MeshBasicMaterial({ color: 0x00ffcc }));
+                    strip.position.y = 0.05;
+                    tileGroup.add(strip);
+                } else { 
+                    const line = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.65, TILE_SIZE), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+                    tileGroup.add(line);
+                }
+            } else if (type === 1) { 
+                mainMesh = new THREE.Mesh(new THREE.BoxGeometry(TILE_SIZE, 0.6, TILE_SIZE), baseMat);
+            } else if (type === 2) { 
+                const rampShape = new THREE.Shape();
+                rampShape.moveTo(-TILE_SIZE/2, -0.3);
+                rampShape.lineTo(TILE_SIZE/2, 4);
+                rampShape.lineTo(TILE_SIZE/2, -0.3);
+                rampShape.lineTo(-TILE_SIZE/2, -0.3);
+                const extrudeSettings = { depth: TILE_SIZE, bevelEnabled: false };
+                const rampGeo = new THREE.ExtrudeGeometry(rampShape, extrudeSettings);
+                rampGeo.center();
+                rampGeo.rotateY(Math.PI/2);
+                mainMesh = new THREE.Mesh(rampGeo, baseMat);
+                mainMesh.position.y = 1.85; 
+            }
+
+            mainMesh.castShadow = true;
+            mainMesh.receiveShadow = true;
+            tileGroup.add(mainMesh);
+            tileGroup.rotation.y = (rotation * Math.PI) / 180;
+            return tileGroup;
+        }
+
+        // Generate Map from Data Object
+        function loadTrackFromData(data) {
+            // Clear current map elements fully first
+            Object.keys(trackData).forEach(key => {
+                scene.remove(trackData[key].mesh);
+            });
+            trackData = {};
+
+            // Rebuild elements loop
+            Object.keys(data).forEach(key => {
+                const item = data[key];
+                const coords = key.split(',');
+                const gX = parseInt(coords[0]);
+                const gZ = parseInt(coords[1]);
+
+                const mesh = createTileMesh(item.type, item.rotation);
+                mesh.position.set(gX * TILE_SIZE, 0.3, gZ * TILE_SIZE);
+                scene.add(mesh);
+                trackData[key] = { type: item.type, rotation: item.rotation, mesh: mesh };
+            });
+        }
+
+        // Starting default loop map array configuration
+        const defaultTrack = {
+            "0,0": {type: 0, rotation: 0}, "0,-1": {type: 0, rotation: 0}, "0,-2": {type: 2, rotation: 0}, "0,-3": {type: 0, rotation: 0},
+            "0,-4": {type: 1, rotation: 270}, "1,-4": {type: 0, rotation: 90}, "2,-4": {type: 1, rotation: 180},
+            "2,-3": {type: 3, rotation: 0}, "2,-2": {type: 0, rotation: 0}, "2,-1": {type: 0, rotation: 0},
+            "2,0": {type: 1, rotation: 90}, "1,0": {type: 0, rotation: 90}
+        };
+        loadTrackFromData(defaultTrack);
+
+        // --- CAR GARAGE ---
+        const carGroup = new THREE.Group();
+        let carBodyMesh;
+
+        function buildCar(paintColor = 0xff4757) {
+            while(carGroup.children.length > 0){ carGroup.remove(carGroup.children[0]); }
+            const bodyMat = new THREE.MeshStandardMaterial({ color: paintColor, roughness: 0.2, metalness: 0.5 });
+            
+            carBodyMesh = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.7, 4.4), bodyMat);
+            carBodyMesh.position.y = 0.6;
+            carBodyMesh.castShadow = true;
+            carGroup.add(carBodyMesh);
+
+            const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.6, 2.2), new THREE.MeshStandardMaterial({ color: 0x111111 }));
+            cabin.position.set(0, 1.15, -0.2);
+            carGroup.add(cabin);
+
+            const wheelGeo = new THREE.CylinderGeometry(0.45, 0.45, 0.5, 12);
+            wheelGeo.rotateZ(Math.PI / 2);
+            const whPositions = [[1.2, 0.45, 1.4], [-1.2, 0.45, 1.4], [1.2, 0.45, -1.4], [-1.2, 0.45, -1.4]];
+            whPositions.forEach(pos => {
+                const wh = new THREE.Mesh(wheelGeo, new THREE.MeshStandardMaterial({ color: 0x222222 }));
+                wh.position.set(pos[0], pos[1], pos[2]);
+                carGroup.add(wh);
+            });
+        }
+        buildCar();
+        scene.add(carGroup);
+
+        // Physics Systems
+        let carPos = new THREE.Vector3(0, 0.3, 0);
+        let speed = 0;
+        let maxSpeed = 1.8;
+        let accel = 0.03;
+        let handling = 0.04;
+        let angle = 0;
+
+        function resetCar() {
+            carPos.set(0, 0.6, 0);
+            speed = 0;
+            angle = 0;
+            carGroup.position.copy(carPos);
+            carGroup.rotation.set(0,0,0);
+        }
+
+        const keys = { w:0, a:0, s:0, d:0, ArrowUp:0, ArrowDown:0, ArrowLeft:0, ArrowRight:0 };
+        window.addEventListener('keydown', e => { 
+            if(e.key === ' ' && isBuildMode) { currentTileRotation = (currentTileRotation + 90) % 360; updatePreview(); }
+            if(e.key.toLowerCase() === 'r') resetCar();
+            if(e.key in keys) keys[e.key] = 1; 
+        });
+        window.addEventListener('keyup', e => { if(e.key in keys) keys[e.key] = 0; });
+
+        // --- SIMULATION TICK LOOP ---
+        const speedoElement = document.getElementById('speedo');
+
+        function updatePhysics() {
+            if (isBuildMode) return;
+
+            const gas = keys.w || keys.ArrowUp;
+            const brake = keys.s || keys.ArrowDown;
+            const left = keys.a || keys.ArrowLeft;
+            const right = keys.d || keys.ArrowRight;
+
+            if (gas) speed = Math.min(speed + accel, maxSpeed);
+            else if (brake) speed = Math.max(speed - accel, -maxSpeed/2);
+            else speed *= 0.96;
+
+            if (Math.abs(speed) > 0.05) {
+                const turnDir = speed > 0 ? 1 : -1;
+                if (left) angle += handling * turnDir;
+                if (right) angle -= handling * turnDir;
+            }
+
+            const gX = Math.round(carPos.x / TILE_SIZE);
+            const gZ = Math.round(carPos.z / TILE_SIZE);
+            const activeTile = trackData[`${gX},${gZ}`];
+
+            let targetY = 0.3;
+            maxSpeed = 1.8;
+
+            if (activeTile) {
+                if (activeTile.type === 2) { 
+                    let relativeZ = (carPos.z / TILE_SIZE) - gZ;
+                    if (activeTile.rotation === 0) targetY = THREE.MathUtils.lerp(0.3, 4.5, relativeZ + 0.5);
+                } else if (activeTile.type === 3) {
+                    maxSpeed = 3.2; 
+                    speed = Math.min(speed + 0.1, maxSpeed);
+                }
+            }
+
+            carPos.y = THREE.MathUtils.lerp(carPos.y, targetY, 0.2);
+            carPos.x += Math.sin(angle) * speed;
+            carPos.z += Math.cos(angle) * speed;
+
+            carGroup.position.copy(carPos);
+            carGroup.rotation.y = angle;
+
+            speedoElement.innerHTML = `${Math.round(Math.abs(speed) * 140)} <span style="font-size:14px; color:#fff;">km/h</span>`;
+        }
+
+        function updateCamera() {
+            if (!isBuildMode) {
+                const camBack = new THREE.Vector3(0, 5, -12).applyQuaternion(carGroup.quaternion);
+                const targetCamPos = carGroup.position.clone().add(camBack);
+                camera.position.lerp(targetCamPos, 0.1);
+                camera.lookAt(carGroup.position.clone().add(new THREE.Vector3(0,1,0)));
+            } else {
+                camera.position.set(cameraOffset.x, 80, cameraOffset.z + 40);
+                camera.lookAt(cameraOffset.x, 0, cameraOffset.z);
+            }
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            updatePhysics();
+            updateCamera();
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // --- INTERACTIVE MOUSE MAP BUILD CONTROLS ---
+        const toggleBtn = document.getElementById('toggle-mode-btn');
+        const editorPanel = document.getElementById('editor-panel');
+        const modeTag = document.getElementById('mode-tag');
+
+        toggleBtn.addEventListener('click', () => {
+            isBuildMode = !isBuildMode;
+            if (isBuildMode) {
+                toggleBtn.innerText = "Switch to Race Mode";
+                toggleBtn.classList.add('active');
+                editorPanel.style.display = 'flex';
+                modeTag.innerText = "Building";
+                modeTag.style.color = "#00ffcc";
+                previewMesh.visible = true;
+                cameraOffset.copy(carGroup.position);
+            } else {
+                toggleBtn.innerText = "Switch to Build Mode";
+                toggleBtn.classList.remove('active');
+                editorPanel.style.display = 'none';
+                modeTag.innerText = "Racing";
+                modeTag.style.color = "#ff4757";
+                previewMesh.visible = false;
+            }
+        });
+
+        window.addEventListener('contextmenu', e => e.preventDefault());
+
+        window.addEventListener('mousedown', (e) => {
+            if (!isBuildMode) return;
+            if (e.button === 2) { 
+                isRightDragging = true;
+                previousMousePosition = { x: e.clientX, y: e.clientY };
+            }
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (!isBuildMode) return;
+
+            if (isRightDragging) {
+                const deltaX = e.clientX - previousMousePosition.x;
+                const deltaY = e.clientY - previousMousePosition.y;
+                cameraOffset.x -= deltaX * 0.4;
+                cameraOffset.z -= deltaY * 0.4;
+                previousMousePosition = { x: e.clientX, y: e.clientY };
+            }
+
+            mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObject(buildFloor);
+
+            if (intersects.length > 0) {
+                const point = intersects[0].point;
+                const gX = Math.round(point.x / TILE_SIZE);
+                const gZ = Math.round(point.z / TILE_SIZE);
+                previewMesh.position.set(gX * TILE_SIZE, 0.3, gZ * TILE_SIZE);
+            }
+        });
+
+        window.addEventListener('mouseup', (e) => {
+            if (e.button === 2) isRightDragging = false;
+        });
+
+        // Left Click to place
+        window.addEventListener('click', (e) => {
+            if (!isBuildMode || e.button !== 0 || e.target.tagName === 'BUTTON' || e.target.classList.contains('color-dot')) return;
+
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObject(buildFloor);
+
+            if (intersects.length > 0) {
+                const point = intersects[0].point;
+                const gX = Math.round(point.x / TILE_SIZE);
+                const gZ = Math.round(point.z / TILE_SIZE);
+                const key = `${gX},${gZ}`;
+
+                if (trackData[key]) {
+                    scene.remove(trackData[key].mesh);
+                    delete trackData[key];
+                }
+
+                const newMesh = createTileMesh(currentTileType, currentTileRotation);
+                newMesh.position.set(gX * TILE_SIZE, 0.3, gZ * TILE_SIZE);
+                scene.add(newMesh);
+
+                trackData[key] = { type: currentTileType, rotation: currentTileRotation, mesh: newMesh };
+            }
+        });
+
+        // --- IMPORT / EXPORT DATA ENGINE ---
+        document.getElementById('export-btn').addEventListener('click', () => {
+            const saveObject = {};
+            Object.keys(trackData).forEach(key => {
+                saveObject[key] = {
+                    type: trackData[key].type,
+                    rotation: trackData[key].rotation
+                };
+            });
+
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(saveObject));
+            const downloadAnchor = document.createElement('a');
+            downloadAnchor.setAttribute("href", dataStr);
+            downloadAnchor.setAttribute("download", "custom_polytrack.json");
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            downloadAnchor.remove();
+        });
+
+        const fileInput = document.getElementById('file-input');
+        document.getElementById('import-btn').addEventListener('click', () => fileInput.click());
+        
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                try {
+                    const parsedData = JSON.parse(event.target.result);
+                    loadTrackFromData(parsedData);
+                    resetCar();
+                } catch(err) {
+                    alert("Error reading track file. Make sure it's a valid track json!");
+                }
+            };
+            reader.readAsText(file);
+        });
+
+        // UI Dashboard labels
+        const tileNameLabel = document.getElementById('tile-name');
+        function updatePreview() { tileNameLabel.innerText = `${tileTypes[currentTileType].name} (${currentTileRotation}°)`; }
+
+        document.getElementById('next-tile').addEventListener('click', () => { currentTileType = (currentTileType + 1) % tileTypes.length; updatePreview(); });
+        document.getElementById('prev-tile').addEventListener('click', () => { currentTileType = (currentTileType - 1 + tileTypes.length) % tileTypes.length; updatePreview(); });
+        document.getElementById('rotate-tile').addEventListener('click', () => { currentTileRotation = (currentTileRotation + 90) % 360; updatePreview(); });
+
+        document.querySelectorAll('.color-dot').forEach(dot => {
+            dot.addEventListener('click', (e) => {
+                document.querySelectorAll('.color-dot').forEach(d => d.classList.remove('selected'));
+                e.target.classList.add('selected');
+                buildCar(parseInt(e.target.getAttribute('data-color'), 16));
+            });
+        });
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
