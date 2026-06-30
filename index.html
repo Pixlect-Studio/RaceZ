@@ -3,53 +3,137 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PolyTrack Shareable Sandbox</title>
+    <title>RaceZ Arcade Sandbox - Mutliplayer-Building track | BETA</title>
     <style>
         body { margin: 0; overflow: hidden; background: #a3d2e2; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; user-select: none; }
         #canvas-container { width: 100vw; height: 100vh; }
         
-        .hud-panel { position: absolute; padding: 15px; background: rgba(20, 20, 25, 0.85); color: #fff; border-radius: 10px; backdrop-filter: blur(5px); box-shadow: 0 4px 15px rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); }
-        #stats-panel { top: 20px; left: 20px; min-width: 150px; }
-        #control-panel { top: 20px; right: 20px; text-align: right; }
+        .hud-panel { position: absolute; padding: 15px; background: rgba(15, 23, 42, 0.95); color: #f8fafc; border-radius: 12px; backdrop-filter: blur(8px); box-shadow: 0 8px 32px rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.08); z-index: 10; }
+        #stats-panel { top: 20px; left: 20px; min-width: 160px; }
+        #control-panel { top: 20px; right: 20px; text-align: right; display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }
         #editor-panel { bottom: 20px; left: 50%; transform: translateX(-50%); display: none; flex-direction: column; align-items: center; gap: 10px; width: 90%; max-width: 500px; }
         
-        .hud-title { font-size: 12px; text-transform: uppercase; letter-spacing: 2px; color: #8a99ad; margin-bottom: 5px; }
-        .hud-value { font-size: 28px; font-weight: 800; font-family: monospace; color: #00ffcc; }
+        /* Multiplayer Server Overlay */
+        #mp-panel { top: 20px; left: 50%; transform: translateX(-50%); display: none; flex-direction: column; gap: 8px; width: 320px; text-align: center; }
+        .server-btn { background: #1e293b; border: 1px solid #334155; color: white; padding: 8px; font-size: 12px; border-radius: 6px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+        .server-btn:hover { background: #334155; border-color: #38bdf8; }
+        .server-btn.connected { background: #047857; border-color: #10b981; }
         
-        .btn { background: #3a4750; border: none; color: white; padding: 10px 20px; font-size: 14px; font-weight: bold; border-radius: 5px; cursor: pointer; transition: all 0.2s; text-transform: uppercase; }
-        .btn:hover { background: #00ffcc; color: #141419; }
-        .btn.active { background: #ff4757; color: white; }
-        .btn-share { background: #1e90ff; font-size: 11px; padding: 6px 12px; margin-left: 5px; }
-        .btn-share:hover { background: #00ffcc; color: #141419; }
+        #admin-input { background: #0f172a; border: 1px solid #334155; color: #ef4444; padding: 6px; border-radius: 6px; width: 110px; text-align: center; font-family: monospace; font-size: 11px; margin-top: 4px; outline: none; }
+        #admin-input.unlocked { border-color: #10b981; color: #10b981; box-shadow: 0 0 10px rgba(16,185,129,0.2); }
+        
+        #scanner-tooltip { position: absolute; display: none; background: rgba(15, 23, 42, 0.95); color: #bf55ec; padding: 8px 12px; border-radius: 6px; font-family: monospace; font-size: 12px; pointer-events: none; border: 1px solid #bf55ec; box-shadow: 0 0 10px rgba(191,85,236,0.3); z-index: 100; }
+        
+        .hud-title { font-size: 11px; text-transform: uppercase; letter-spacing: 2px; color: #94a3b8; margin-bottom: 3px; }
+        .hud-value { font-size: 32px; font-weight: 900; font-family: monospace; color: #38bdf8; text-shadow: 0 0 10px rgba(56,189,248,0.2); }
+        
+        .btn { background: #334155; border: none; color: white; padding: 10px 20px; font-size: 13px; font-weight: bold; border-radius: 6px; cursor: pointer; transition: all 0.2s; text-transform: uppercase; letter-spacing: 1px; }
+        .btn:hover { background: #38bdf8; color: #0f172a; box-shadow: 0 0 15px rgba(56,189,248,0.4); }
+        .btn.active { background: #ef4444; color: white; box-shadow: 0 0 15px rgba(239,68,68,0.4); }
+        .btn-share { background: #0284c7; font-size: 11px; padding: 6px 14px; margin-left: 5px; color: white; }
+        .btn-share:hover { background: #38bdf8; color: #0f172a; }
         
         .editor-row { display: flex; gap: 10px; align-items: center; width: 100%; justify-content: space-between; }
         .color-picker-wrap { display: flex; gap: 5px; }
-        .color-dot { width: 25px; height: 25px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; }
-        .color-dot.selected { border-color: #fff; transform: scale(1.1); }
+        .color-dot { width: 22px; height: 22px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; transition: transform 0.1s; }
+        .color-dot.selected { border-color: #f8fafc; transform: scale(1.2); }
         
         #file-input { display: none; }
+
+        /* Device Selection Screen */
+        #device-selector { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #0f172a; z-index: 99999; display: flex; flex-direction: column; justify-content: center; align-items: center; color: white; }
+        .selector-stage { display: flex; flex-direction: column; align-items: center; gap: 24px; text-align: center; }
+        .selector-title { font-size: 36px; font-weight: 900; color: #38bdf8; text-transform: uppercase; letter-spacing: 2px; margin: 0; text-shadow: 0 0 20px rgba(56,189,248,0.3); }
+        .selector-subtitle { color: #94a3b8; font-size: 16px; margin: 0; }
+        .btn-large { padding: 18px 36px; font-size: 18px; min-width: 240px; border-radius: 10px; }
+
+        /* Mobile Touch Controls HUD Overlay */
+        #mobile-hud-overlay { display: none; position: absolute; bottom: 0; left: 0; width: 100vw; height: 180px; z-index: 100; pointer-events: none; }
+        .touch-pedal { width: 75px; height: 110px; display: flex; flex-direction: column; justify-content: center; align-items: center; border-radius: 12px; font-weight: 900; font-size: 14px; letter-spacing: 1px; color: white; box-shadow: 0 8px 16px rgba(0,0,0,0.4); border: 2px solid rgba(255,255,255,0.1); }
+        .touch-arrow { width: 80px; height: 80px; display: flex; justify-content: center; align-items: center; background: #334155; border-radius: 50%; font-size: 28px; font-weight: bold; color: white; box-shadow: 0 6px 12px rgba(0,0,0,0.3); }
+        #steering-wheel-container { width: 140px; height: 140px; border: 12px solid #334155; border-radius: 50%; position: relative; background: rgba(15, 23, 42, 0.6); box-sizing: border-box; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+        .wheel-spoke-h { position: absolute; top: 50%; left: 0; width: 100%; height: 12px; background: #334155; transform: translateY(-50%); }
+        .wheel-spoke-v { position: absolute; left: 50%; top: 50%; width: 12px; height: 50%; background: #334155; transform: translateX(-50%); }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
 </head>
 <body>
 
+    <div id="device-selector">
+        <div id="selector-stage1" class="selector-stage">
+            <h1 class="selector-title">Device Selector</h1>
+            <p class="selector-subtitle">Choose your control terminal platform</p>
+            <div style="display: flex; flex-direction: column; gap: 15px;">
+                <button class="btn btn-large" onclick="initPlatformSelection('laptop')">💻 Laptop</button>
+                <button class="btn btn-large" style="background: #6366f1;" onclick="initPlatformSelection('mobile')">📱 Mobile (Touchscreen)</button>
+            </div>
+        </div>
+        <div id="selector-stage2" class="selector-stage" style="display: none;">
+            <h1 class="selector-title">Steering Core</h1>
+            <p class="selector-subtitle">Select your touchscreen layout preference</p>
+            <div style="display: flex; flex-direction: column; gap: 15px;">
+                <button class="btn btn-large" style="background: #10b981;" onclick="initMobileLayout('wheel')">🔄 Steering Wheel</button>
+                <button class="btn btn-large" style="background: #f59e0b;" onclick="initMobileLayout('arrows')">↔️ Touch Arrows</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="mobile-hud-overlay">
+        <div style="position: absolute; right: 25px; bottom: 25px; display: flex; gap: 15px; align-items: flex-end; pointer-events: auto;">
+            <div id="pedal-brake" class="touch-pedal" style="background: #ef4444; height: 95px;"><span>REVERSE</span><span style="font-size:10px;font-weight:normal;">BRAKE</span></div>
+            <div id="pedal-gas" class="touch-pedal" style="background: #10b981; height: 125px;"><span>GAS</span><span style="font-size:10px;font-weight:normal;">ACCEL</span></div>
+        </div>
+        
+        <div id="hud-touch-arrows" style="display: none; position: absolute; left: 25px; bottom: 35px; gap: 20px; pointer-events: auto;">
+            <div id="arrow-left" class="touch-arrow">&larr;</div>
+            <div id="arrow-right" class="touch-arrow">&rarr;</div>
+        </div>
+
+        <div id="hud-touch-wheel" style="display: none; position: absolute; left: 35px; bottom: 25px; pointer-events: auto;">
+            <div id="steering-wheel-container">
+                <div class="wheel-spoke-h"></div>
+                <div class="wheel-spoke-v"></div>
+            </div>
+        </div>
+    </div>
+
     <div id="canvas-container"></div>
+    <div id="scanner-tooltip">CALCULATING AIR TIME...</div>
     <input type="file" id="file-input" accept=".json">
 
     <div id="stats-panel" class="hud-panel">
         <div class="hud-title">Speed</div>
-        <div id="speedo" class="hud-value">0 <span style="font-size:14px; color:#fff;">km/h</span></div>
-        <div class="hud-title" style="margin-top: 10px;">Mode</div>
-        <div id="mode-tag" style="color: #ff4757; font-weight: bold; text-transform: uppercase; font-size: 14px;">Racing</div>
+        <div id="speedo" class="hud-value">0 <span style="font-size:14px; color:#94a3b8; font-weight:normal;">km/h</span></div>
+        <div class="hud-title" style="margin-top: 10px;">Altitude</div>
+        <div id="altitude-value" style="font-weight: bold; font-family: monospace; color: #38bdf8;">0.0m</div>
+        <div class="hud-title" style="margin-top: 10px;">Network Status</div>
+        <div id="net-status" style="color: #94a3b8; font-weight: bold; font-size: 12px; font-family: monospace;">Offline Sandbox</div>
+    </div>
+
+    <div id="mp-panel" class="hud-panel">
+        <div class="hud-title" style="color:#38bdf8; font-weight:900;">Multiplayer Grid Browser</div>
+        <button id="srv-btn-1" class="server-btn" onclick="connectToRoom('poly-server-1')">
+            <span>Server 1 (5ms High-Speed)</span><span id="srv-count-1" style="color:#38bdf8;">0 / 5 Players</span>
+        </button>
+        <button id="srv-btn-2" class="server-btn" onclick="connectToRoom('poly-server-2')">
+            <span>Server 2 (Standard)</span><span id="srv-count-2" style="color:#38bdf8;">0 / 5 Players</span>
+        </button>
     </div>
 
     <div id="control-panel" class="hud-panel">
         <button id="toggle-mode-btn" class="btn">Switch to Build Mode</button>
-        <div style="margin-top: 8px;">
-            <button id="export-btn" class="btn btn-share">Export Track</button>
-            <button id="import-btn" class="btn btn-share" style="background:#2ed573;">Import Track</button>
+        
+        <div style="display: flex; gap: 5px; align-items: flex-start;">
+            <div style="display: flex; flex-direction: column; align-items: center;">
+                <button id="export-btn" class="btn btn-share">Export Track</button>
+                <input type="text" id="admin-input" placeholder="ADMIN Code" oninput="verifyAdminCredentials(this)">
+            </div>
+            <div style="display: flex; flex-direction: column; align-items: center;">
+                <button id="import-btn" class="btn btn-share" style="background:#10b981; margin-left: 0;">Import Track</button>
+                <button id="mp-toggle-btn" class="btn btn-share" style="background:#6366f1; margin-left: 0; margin-top: 4px; width: 100%;">Multiplayer</button>
+            </div>
         </div>
-        <div style="font-size: 11px; color: #aaa; margin-top: 8px;">[W,A,S,D] Drive | [R] Reset | Build: [Right-Click + Drag] Pan Map</div>
     </div>
 
     <div id="editor-panel" class="hud-panel">
@@ -57,48 +141,271 @@
             <button id="prev-tile" class="btn" style="padding: 5px 12px;">&lt;</button>
             <div style="text-align: center;">
                 <div class="hud-title">Selected Piece</div>
-                <div id="tile-name" style="font-weight: bold; font-size: 16px; color:#00ffcc;">Straight Track</div>
+                <div id="tile-name" style="font-weight: bold; font-size: 15px; color:#38bdf8;">Straight Track</div>
             </div>
             <button id="next-tile" class="btn" style="padding: 5px 12px;">&gt;</button>
-            <button id="rotate-tile" class="btn" style="background:#2f3542;">Rotate [Space]</button>
+            <button id="rotate-tile" class="btn" style="background:#475569;">Rotate [Space]</button>
         </div>
-        <div class="editor-row" style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 8px;">
-            <span class="hud-title">Car Paint:</span>
+        <div class="editor-row" style="border-top: 1px solid rgba(255,255,255,0.08); padding-top: 8px;">
+            <span class="hud-title">Paint:</span>
             <div class="color-picker-wrap">
-                <div class="color-dot selected" style="background: #ff4757;" data-color="0xff4757"></div>
-                <div class="color-dot" style="background: #2ed573;" data-color="0x2ed573"></div>
-                <div class="color-dot" style="background: #1e90ff;" data-color="0x1e90ff"></div>
-                <div class="color-dot" style="background: #ffa502;" data-color="0xffa502"></div>
+                <div class="color-dot selected" style="background: #ef4444;" data-color="0xef4444"></div>
+                <div class="color-dot" style="background: #10b981;" data-color="0x10b981"></div>
+                <div class="color-dot" style="background: #3b82f6;" data-color="0x3b82f6"></div>
+                <div class="color-dot" style="background: #f59e0b;" data-color="0xf59e0b"></div>
                 <div class="color-dot" style="background: #ffffff;" data-color="0xffffff"></div>
             </div>
         </div>
     </div>
 
     <script>
-        // --- GAME STATE ---
+        // --- DEVICE PLATFORM SETUP INTERACTION ---
+        function initPlatformSelection(choice) {
+            if (choice === 'laptop') {
+                document.getElementById('device-selector').style.display = 'none';
+                try { audioCtx.resume(); } catch(e){}
+            } else if (choice === 'mobile') {
+                document.getElementById('selector-stage1').style.display = 'none';
+                document.getElementById('selector-stage2').style.display = 'flex';
+            }
+        }
+
+        function initMobileLayout(type) {
+            document.getElementById('device-selector').style.display = 'none';
+            document.getElementById('mobile-hud-overlay').style.display = 'block';
+            try { audioCtx.resume(); } catch(e){}
+
+            if (type === 'arrows') {
+                document.getElementById('hud-touch-arrows').style.display = 'flex';
+            } else if (type === 'wheel') {
+                document.getElementById('hud-touch-wheel').style.display = 'block';
+                setupWheelTouchCore();
+            }
+            setupMobilePedalListeners();
+        }
+
+        // --- ABLY MULTIPLAYER SETUP WITH YOUR LIVE KEY ---
+        const ABLY_API_KEY = "XWXN3Q.TrQl_g:mC4l4qH380nqKlQdBlBgFLcsBVJUoEA7IMFcTQr9qTY"; 
+        
+        let ablyClient = null;
+        let spatialChannel = null;
+        let trackChannel = null;
+        let myClientId = "player-" + Math.floor(Math.random() * 999999);
+        let remotePlayers = {};
+        let currentVehicleColor = 0xef4444;
+        let isAdminUnlocked = false;
+        let activeRoomId = null;
+
+        function setNetStatus(text, color) {
+            const el = document.getElementById('net-status');
+            el.innerText = text;
+            el.style.color = color;
+        }
+
+        function verifyAdminCredentials(el) {
+            if (el.value.trim() === "RaceZ_ADMIN") {
+                isAdminUnlocked = true;
+                el.classList.add('unlocked');
+                playSound(600, "sine", 0.2, 0.2);
+            } else {
+                isAdminUnlocked = false;
+                el.classList.remove('unlocked');
+            }
+        }
+
+        document.getElementById('mp-toggle-btn').addEventListener('click', () => {
+            const mpPanel = document.getElementById('mp-panel');
+            mpPanel.style.display = (mpPanel.style.display === 'flex') ? 'none' : 'flex';
+        });
+
+        function updateServerUIConnected(roomId) {
+            document.querySelectorAll('.server-btn').forEach(b => b.classList.remove('connected'));
+            if (roomId === 'poly-server-1') document.getElementById('srv-btn-1').classList.add('connected');
+            if (roomId === 'poly-server-2') document.getElementById('srv-btn-2').classList.add('connected');
+        }
+
+        function connectToRoom(roomId) {
+            if (ablyClient) {
+                spatialChannel.unsubscribe();
+                trackChannel.unsubscribe();
+                spatialChannel.presence.leave();
+                ablyClient.close();
+            }
+
+            activeRoomId = roomId;
+            setNetStatus("Connecting to Ably...", "#f59e0b");
+
+            ablyClient = new Ably.Realtime({ key: ABLY_API_KEY, clientId: myClientId });
+            spatialChannel = ablyClient.channels.get(`${roomId}-spatial`);
+            trackChannel = ablyClient.channels.get(`${roomId}-track`);
+
+            spatialChannel.presence.enter({ color: currentVehicleColor }, (err) => {
+                if(err) return console.error("Presence error:", err);
+                setNetStatus(`Connected: ${roomId.toUpperCase()}`, "#10b981");
+                updateServerUIConnected(roomId);
+                playSound(300, "sine", 0.15, 0.1);
+            });
+
+            spatialChannel.presence.subscribe((presenceMsg) => {
+                spatialChannel.presence.get((err, members) => {
+                    if(!err) {
+                        const countEl = document.getElementById(roomId === 'poly-server-1' ? 'srv-count-1' : 'srv-count-2');
+                        if (countEl) countEl.innerText = `${members.length} / 5 Players`;
+                        
+                        // Limit enforcement
+                        if(members.length > 5 && presenceMsg.clientId === myClientId) {
+                            alert("Server 1 is currently full! Max capacity is 5 players.");
+                            spatialChannel.presence.leave();
+                            ablyClient.close();
+                            setNetStatus("Disconnected (Full)", "#ef4444");
+                        }
+                    }
+                });
+            });
+
+            spatialChannel.presence.subscribe('leave', member => {
+                removeRemotePlayerMesh(member.clientId);
+            });
+
+            // Fast spatial movement subscription
+            spatialChannel.subscribe('move', (msg) => {
+                if (msg.clientId === myClientId) return; 
+                handleRemotePlayerSync(msg.clientId, msg.data);
+            });
+
+            // Real-time track configuration updates
+            trackChannel.subscribe('mutate', (msg) => {
+                if (msg.clientId === myClientId) return;
+                loadTrackFromData(msg.data.track);
+            });
+
+            if(window.netTickInterval) clearInterval(window.netTickInterval);
+            
+            // Server 1 ticks at 5ms as requested
+            let updateInterval = (roomId === 'poly-server-1') ? 5 : 30;
+            window.netTickInterval = setInterval(broadcastSpatialState, updateInterval);
+        }
+
+        function broadcastSpatialState() {
+            if (!spatialChannel || ablyClient.connection.state !== 'connected') return;
+            spatialChannel.publish('move', {
+                x: carPos.x,
+                y: carPos.y,
+                z: carPos.z,
+                angle: angle,
+                color: currentVehicleColor
+            }, (err) => {}); 
+        }
+
+        function broadcastTrackAlteration() {
+            if (!trackChannel || ablyClient.connection.state !== 'connected') return;
+            const cleanTrack = {};
+            Object.keys(trackData).forEach(k => {
+                cleanTrack[k] = { type: trackData[k].type, rotation: trackData[k].rotation, level: trackData[k].level };
+            });
+            trackChannel.publish('mutate', { track: cleanTrack });
+        }
+
+        function handleRemotePlayerSync(id, data) {
+            if (!remotePlayers[id]) {
+                const remoteRoot = new THREE.Group();
+                const mat = new THREE.MeshStandardMaterial({ color: data.color, roughness: 0.2 });
+                const box = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.7, 4.4), mat);
+                box.position.y = 0.6;
+                box.castShadow = true;
+                remoteRoot.add(box);
+                
+                const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.6, 2.0), new THREE.MeshStandardMaterial({ color: 0x111111 }));
+                cabin.position.set(0, 1.15, -0.2);
+                remoteRoot.add(cabin);
+
+                const wheelGeo = new THREE.CylinderGeometry(0.45, 0.45, 0.6, 16);
+                wheelGeo.rotateZ(Math.PI / 2);
+                const whPositions = [[1.25, 0.45, 1.4], [-1.25, 0.45, 1.4], [1.25, 0.45, -1.4], [-1.25, 0.45, -1.4]];
+                whPositions.forEach(pos => {
+                    const wh = new THREE.Mesh(wheelGeo, new THREE.MeshStandardMaterial({ color: 0x222222 }));
+                    wh.position.set(pos[0], pos[1], pos[2]);
+                    remoteRoot.add(wh);
+                });
+
+                scene.add(remoteRoot);
+                remotePlayers[id] = {
+                    group: remoteRoot,
+                    targetPos: new THREE.Vector3(data.x, data.y, data.z),
+                    targetAngle: data.angle,
+                    meshMat: mat
+                };
+            } else {
+                remotePlayers[id].targetPos.set(data.x, data.y, data.z);
+                remotePlayers[id].targetAngle = data.angle;
+                if(remotePlayers[id].meshMat) {
+                    remotePlayers[id].meshMat.color.setHex(data.color);
+                }
+            }
+        }
+
+        function removeRemotePlayerMesh(id) {
+            if(remotePlayers[id]) {
+                scene.remove(remotePlayers[id].group);
+                delete remotePlayers[id];
+            }
+        }
+
+        function processNetInterpolation() {
+            Object.keys(remotePlayers).forEach(id => {
+                let p = remotePlayers[id];
+                p.group.position.lerp(p.targetPos, 0.35);
+                let diff = p.targetAngle - p.group.rotation.y;
+                while (diff < -Math.PI) diff += Math.PI * 2;
+                while (diff > Math.PI) diff -= Math.PI * 2;
+                p.group.rotation.y += diff * 0.35;
+            });
+        }
+
+        // --- AUDIO ENGINE ---
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playSound(freq, type, duration, vol=0.1) {
+            try {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + duration);
+            } catch(e){}
+        }
+
+        // --- GAME SYSTEM SETUP ---
         let isBuildMode = false;
         const TILE_SIZE = 20;
+        const HEIGHT_STEP = 5; 
         let currentTileType = 0; 
         let currentTileRotation = 0; 
         let trackData = {}; 
 
-        // Camera Pan System Coordinates
         let cameraOffset = new THREE.Vector3(0, 0, 0);
         let isRightDragging = false;
         let previousMousePosition = { x: 0, y: 0 };
+        let currentHoveredGrid = { x: 0, z: 0 };
 
         const tileTypes = [
             { name: "Straight Track", color: 0x2f3542 },
-            { name: "90° Left Turn", color: 0x2f3542 },
+            { name: "90° Turn", color: 0x2f3542 },
             { name: "Big Air Ramp", color: 0x57606f },
-            { name: "Neon Boost Pad", color: 0x00ffcc }
+            { name: "Neon Boost Pad", color: 0x1e293b },
+            { name: "Upper-It Block", color: 0x7e8a9b },
+            { name: "Nitro Infused Ramp", color: 0x4a148c } 
         ];
 
-        // --- THREE.JS SETUP ---
+        // --- THREE.JS GRAPHICS SCENE ---
         const container = document.getElementById('canvas-container');
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0xa3d2e2);
-        scene.fog = new THREE.FogExp2(0xa3d2e2, 0.005);
+        scene.fog = new THREE.FogExp2(0xa3d2e2, 0.004);
 
         const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -107,18 +414,16 @@
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         container.appendChild(renderer.domElement);
 
-        // Lights
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.75);
         scene.add(ambientLight);
         const sunLight = new THREE.DirectionalLight(0xffffff, 0.8);
-        sunLight.position.set(100, 150, 50);
+        sunLight.position.set(120, 200, 80);
         sunLight.castShadow = true;
         scene.add(sunLight);
 
-        // Ground Mesh Setup
         const gridHelper = new THREE.GridHelper(1000, 50, 0xffffff, 0xffffff);
-        gridHelper.position.y = 0.1;
-        gridHelper.material.opacity = 0.2;
+        gridHelper.position.y = 0.05;
+        gridHelper.material.opacity = 0.25;
         gridHelper.material.transparent = true;
         scene.add(gridHelper);
 
@@ -137,14 +442,14 @@
         const raycaster = new THREE.Raycaster();
         const mouse = new THREE.Vector2();
 
-        // Target Ghost Preview Block
-        const previewGeo = new THREE.BoxGeometry(TILE_SIZE, 1, TILE_SIZE);
-        const previewMat = new THREE.MeshBasicMaterial({ color: 0x00ffcc, transparent: true, opacity: 0.4 });
-        const previewMesh = new THREE.Mesh(previewGeo, previewMat);
+        const previewMesh = new THREE.Mesh(new THREE.BoxGeometry(TILE_SIZE, 0.5, TILE_SIZE), new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.4 }));
         previewMesh.visible = false;
         scene.add(previewMesh);
 
-        // --- TILE GENERATOR ---
+        const targetMarker = new THREE.Mesh(new THREE.BoxGeometry(TILE_SIZE * 0.8, 0.2, TILE_SIZE * 0.8), new THREE.MeshBasicMaterial({ color: 0xbf55ec, transparent: true, opacity: 0.6 }));
+        targetMarker.visible = false;
+        scene.add(targetMarker);
+
         function createTileMesh(type, rotation) {
             const tileGroup = new THREE.Group();
             const baseMat = new THREE.MeshStandardMaterial({ color: tileTypes[type].color, roughness: 0.5 });
@@ -153,27 +458,38 @@
             if (type === 0 || type === 3) { 
                 mainMesh = new THREE.Mesh(new THREE.BoxGeometry(TILE_SIZE, 0.6, TILE_SIZE), baseMat);
                 if (type === 3) { 
-                    const strip = new THREE.Mesh(new THREE.BoxGeometry(TILE_SIZE, 0.7, 2), new THREE.MeshBasicMaterial({ color: 0x00ffcc }));
+                    const strip = new THREE.Mesh(new THREE.BoxGeometry(TILE_SIZE, 0.7, 4), new THREE.MeshBasicMaterial({ color: 0x00ffcc }));
                     strip.position.y = 0.05;
                     tileGroup.add(strip);
                 } else { 
-                    const line = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.65, TILE_SIZE), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+                    const line = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.65, TILE_SIZE), new THREE.MeshBasicMaterial({ color: 0xffffff }));
                     tileGroup.add(line);
                 }
             } else if (type === 1) { 
                 mainMesh = new THREE.Mesh(new THREE.BoxGeometry(TILE_SIZE, 0.6, TILE_SIZE), baseMat);
-            } else if (type === 2) { 
+            } else if (type === 2 || type === 5) { 
                 const rampShape = new THREE.Shape();
-                rampShape.moveTo(-TILE_SIZE/2, -0.3);
-                rampShape.lineTo(TILE_SIZE/2, 4);
-                rampShape.lineTo(TILE_SIZE/2, -0.3);
-                rampShape.lineTo(-TILE_SIZE/2, -0.3);
+                rampShape.moveTo(-TILE_SIZE/2, 0);
+                rampShape.lineTo(TILE_SIZE/2, HEIGHT_STEP);
+                rampShape.lineTo(TILE_SIZE/2, 0);
+                rampShape.lineTo(-TILE_SIZE/2, 0);
+
                 const extrudeSettings = { depth: TILE_SIZE, bevelEnabled: false };
                 const rampGeo = new THREE.ExtrudeGeometry(rampShape, extrudeSettings);
                 rampGeo.center();
                 rampGeo.rotateY(Math.PI/2);
                 mainMesh = new THREE.Mesh(rampGeo, baseMat);
-                mainMesh.position.y = 1.85; 
+                mainMesh.position.y = HEIGHT_STEP / 2; 
+
+                if (type === 5) { 
+                    const nitroLine = new THREE.Mesh(new THREE.BoxGeometry(TILE_SIZE * 0.9, HEIGHT_STEP + 0.1, 1), new THREE.MeshBasicMaterial({ color: 0xbf55ec }));
+                    nitroLine.rotation.x = -Math.atan2(HEIGHT_STEP, TILE_SIZE);
+                    nitroLine.position.set(0, (HEIGHT_STEP / 2) + 0.1, 0);
+                    tileGroup.add(nitroLine);
+                }
+            } else if (type === 4) { 
+                mainMesh = new THREE.Mesh(new THREE.BoxGeometry(TILE_SIZE, HEIGHT_STEP, TILE_SIZE), baseMat);
+                mainMesh.position.y = HEIGHT_STEP / 2;
             }
 
             mainMesh.castShadow = true;
@@ -183,42 +499,35 @@
             return tileGroup;
         }
 
-        // Generate Map from Data Object
         function loadTrackFromData(data) {
-            // Clear current map elements fully first
-            Object.keys(trackData).forEach(key => {
-                scene.remove(trackData[key].mesh);
-            });
+            if(!data) return;
+            Object.keys(trackData).forEach(key => { scene.remove(trackData[key].mesh); });
             trackData = {};
 
-            // Rebuild elements loop
             Object.keys(data).forEach(key => {
                 const item = data[key];
                 const coords = key.split(',');
                 const gX = parseInt(coords[0]);
                 const gZ = parseInt(coords[1]);
-
+                let level = coords.length > 2 ? parseInt(coords[2]) : (item.level !== undefined ? item.level : 0);
+                
+                const safeKey = `${gX},${gZ},${level}`;
                 const mesh = createTileMesh(item.type, item.rotation);
-                mesh.position.set(gX * TILE_SIZE, 0.3, gZ * TILE_SIZE);
+                let yPos = 0.3 + (level * HEIGHT_STEP);
+                if (item.type === 4) yPos = (level * HEIGHT_STEP); 
+                
+                mesh.position.set(gX * TILE_SIZE, yPos, gZ * TILE_SIZE);
                 scene.add(mesh);
-                trackData[key] = { type: item.type, rotation: item.rotation, mesh: mesh };
+                trackData[safeKey] = { type: item.type, rotation: item.rotation, level: level, mesh: mesh };
             });
         }
 
-        // Starting default loop map array configuration
-        const defaultTrack = {
-            "0,0": {type: 0, rotation: 0}, "0,-1": {type: 0, rotation: 0}, "0,-2": {type: 2, rotation: 0}, "0,-3": {type: 0, rotation: 0},
-            "0,-4": {type: 1, rotation: 270}, "1,-4": {type: 0, rotation: 90}, "2,-4": {type: 1, rotation: 180},
-            "2,-3": {type: 3, rotation: 0}, "2,-2": {type: 0, rotation: 0}, "2,-1": {type: 0, rotation: 0},
-            "2,0": {type: 1, rotation: 90}, "1,0": {type: 0, rotation: 90}
-        };
-        loadTrackFromData(defaultTrack);
-
-        // --- CAR GARAGE ---
+        // --- CAR ASSEMBLY ---
         const carGroup = new THREE.Group();
         let carBodyMesh;
 
-        function buildCar(paintColor = 0xff4757) {
+        function buildCar(paintColor = 0xef4444) {
+            currentVehicleColor = paintColor;
             while(carGroup.children.length > 0){ carGroup.remove(carGroup.children[0]); }
             const bodyMat = new THREE.MeshStandardMaterial({ color: paintColor, roughness: 0.2, metalness: 0.5 });
             
@@ -227,13 +536,13 @@
             carBodyMesh.castShadow = true;
             carGroup.add(carBodyMesh);
 
-            const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.6, 2.2), new THREE.MeshStandardMaterial({ color: 0x111111 }));
+            const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.6, 2.0), new THREE.MeshStandardMaterial({ color: 0x111111 }));
             cabin.position.set(0, 1.15, -0.2);
             carGroup.add(cabin);
 
-            const wheelGeo = new THREE.CylinderGeometry(0.45, 0.45, 0.5, 12);
+            const wheelGeo = new THREE.CylinderGeometry(0.45, 0.45, 0.6, 16);
             wheelGeo.rotateZ(Math.PI / 2);
-            const whPositions = [[1.2, 0.45, 1.4], [-1.2, 0.45, 1.4], [1.2, 0.45, -1.4], [-1.2, 0.45, -1.4]];
+            const whPositions = [[1.25, 0.45, 1.4], [-1.25, 0.45, 1.4], [1.25, 0.45, -1.4], [-1.25, 0.45, -1.4]];
             whPositions.forEach(pos => {
                 const wh = new THREE.Mesh(wheelGeo, new THREE.MeshStandardMaterial({ color: 0x222222 }));
                 wh.position.set(pos[0], pos[1], pos[2]);
@@ -243,44 +552,119 @@
         buildCar();
         scene.add(carGroup);
 
-        // Physics Systems
+        // --- CAR ARCADE PHYSICS INTERPOLATION LOOP ---
         let carPos = new THREE.Vector3(0, 0.3, 0);
-        let speed = 0;
-        let maxSpeed = 1.8;
-        let accel = 0.03;
-        let handling = 0.04;
-        let angle = 0;
+        let speed = 0, maxSpeed = 2.4, accel = 0.05, handling = 0.045, angle = 0, yVelocity = 0;
+        const GRAVITY = -0.012;
+        let isAirborne = false, cameraShake = 0;
 
         function resetCar() {
-            carPos.set(0, 0.6, 0);
-            speed = 0;
-            angle = 0;
+            carPos.set(0, 2, 0);
+            speed = 0; yVelocity = 0; angle = 0; isAirborne = false;
             carGroup.position.copy(carPos);
             carGroup.rotation.set(0,0,0);
+            playSound(150, "sine", 0.3, 0.2);
         }
 
         const keys = { w:0, a:0, s:0, d:0, ArrowUp:0, ArrowDown:0, ArrowLeft:0, ArrowRight:0 };
         window.addEventListener('keydown', e => { 
+            if (document.activeElement.tagName === 'INPUT') return; 
             if(e.key === ' ' && isBuildMode) { currentTileRotation = (currentTileRotation + 90) % 360; updatePreview(); }
+            if(e.key === ' ' && !isBuildMode && !isAirborne) { yVelocity = 0.35; isAirborne = true; playSound(350, "triangle", 0.15, 0.15); }
             if(e.key.toLowerCase() === 'r') resetCar();
+            if((e.key === 'Delete' || e.key === 'Backspace') && isBuildMode) {
+                let deletedAnything = false;
+                for(let lvl = 9; lvl >= 0; lvl--) {
+                    const checkKey = `${currentHoveredGrid.x},${currentHoveredGrid.z},${lvl}`;
+                    if(trackData[checkKey]) {
+                        scene.remove(trackData[checkKey].mesh);
+                        delete trackData[checkKey];
+                        deletedAnything = true;
+                        break; 
+                    }
+                }
+                if(deletedAnything) {
+                    playSound(180, "sawtooth", 0.1, 0.15);
+                    updateBuildFloorHeight(); 
+                    if(activeRoomId && isAdminUnlocked) broadcastTrackAlteration();
+                }
+            }
             if(e.key in keys) keys[e.key] = 1; 
         });
         window.addEventListener('keyup', e => { if(e.key in keys) keys[e.key] = 0; });
 
-        // --- SIMULATION TICK LOOP ---
+        // --- MOBILE TOUCH LISTENERS LOGIC IMPLEMENTATION ---
+        function setupMobilePedalListeners() {
+            const pedalGas = document.getElementById('pedal-gas');
+            const pedalBrake = document.getElementById('pedal-brake');
+            const arrowLeft = document.getElementById('arrow-left');
+            const arrowRight = document.getElementById('arrow-right');
+
+            // Gas Pedal
+            pedalGas.addEventListener('touchstart', (e) => { keys.w = 1; e.preventDefault(); });
+            pedalGas.addEventListener('touchend', (e) => { keys.w = 0; e.preventDefault(); });
+            // Brake Pedal
+            pedalBrake.addEventListener('touchstart', (e) => { keys.s = 1; e.preventDefault(); });
+            pedalBrake.addEventListener('touchend', (e) => { keys.s = 0; e.preventDefault(); });
+
+            // Layout Arrow Handlers
+            if(arrowLeft && arrowRight) {
+                arrowLeft.addEventListener('touchstart', (e) => { keys.a = 1; e.preventDefault(); });
+                arrowLeft.addEventListener('touchend', (e) => { keys.a = 0; e.preventDefault(); });
+                arrowRight.addEventListener('touchstart', (e) => { keys.d = 1; e.preventDefault(); });
+                arrowRight.addEventListener('touchend', (e) => { keys.d = 0; e.preventDefault(); });
+            }
+        }
+
+        function setupWheelTouchCore() {
+            const wheelContainer = document.getElementById('steering-wheel-container');
+            let isTrackingWheel = false;
+
+            function processWheelMovement(e) {
+                const rect = wheelContainer.getBoundingClientRect();
+                const centerX = rect.left + rect.width / 2;
+                const centerY = rect.top + rect.height / 2;
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+                const angleRad = Math.atan2(clientY - centerY, clientX - centerX);
+                let angleDeg = angleRad * (180 / Math.PI) - 90; // Align zero upwards
+
+                if (angleDeg < -180) angleDeg += 360;
+                if (angleDeg > 180) angleDeg -= 360;
+
+                // Max steering bounds clamp
+                angleDeg = Math.max(-85, Math.min(85, angleDeg));
+                wheelContainer.style.transform = `rotate(${angleDeg}deg)`;
+
+                // Maps rotation angle thresholds directly to system keys
+                if (angleDeg < -12) { keys.a = 1; keys.d = 0; }
+                else if (angleDeg > 12) { keys.d = 1; keys.a = 0; }
+                else { keys.a = 0; keys.d = 0; }
+            }
+
+            wheelContainer.addEventListener('touchstart', (e) => { isTrackingWheel = true; processWheelMovement(e); e.preventDefault(); });
+            wheelContainer.addEventListener('touchmove', (e) => { if(isTrackingWheel) processWheelMovement(e); e.preventDefault(); });
+            window.addEventListener('touchend', () => { 
+                if(isTrackingWheel) { 
+                    isTrackingWheel = false; 
+                    wheelContainer.style.transform = 'rotate(0deg)'; 
+                    keys.a = 0; keys.d = 0; 
+                } 
+            });
+        }
+
         const speedoElement = document.getElementById('speedo');
+        const altitudeElement = document.getElementById('altitude-value');
 
         function updatePhysics() {
             if (isBuildMode) return;
+            const gas = keys.w || keys.ArrowUp, brake = keys.s || keys.ArrowDown, left = keys.a || keys.ArrowLeft, right = keys.d || keys.ArrowRight;
 
-            const gas = keys.w || keys.ArrowUp;
-            const brake = keys.s || keys.ArrowDown;
-            const left = keys.a || keys.ArrowLeft;
-            const right = keys.d || keys.ArrowRight;
-
+            if (gas && Math.random() < 0.15 && !isAirborne) playSound(80 + (Math.abs(speed) * 80), "triangle", 0.08, 0.06);
             if (gas) speed = Math.min(speed + accel, maxSpeed);
             else if (brake) speed = Math.max(speed - accel, -maxSpeed/2);
-            else speed *= 0.96;
+            else speed *= 0.97; 
 
             if (Math.abs(speed) > 0.05) {
                 const turnDir = speed > 0 ? 1 : -1;
@@ -288,41 +672,76 @@
                 if (right) angle -= handling * turnDir;
             }
 
-            const gX = Math.round(carPos.x / TILE_SIZE);
-            const gZ = Math.round(carPos.z / TILE_SIZE);
-            const activeTile = trackData[`${gX},${gZ}`];
-
-            let targetY = 0.3;
-            maxSpeed = 1.8;
-
-            if (activeTile) {
-                if (activeTile.type === 2) { 
-                    let relativeZ = (carPos.z / TILE_SIZE) - gZ;
-                    if (activeTile.rotation === 0) targetY = THREE.MathUtils.lerp(0.3, 4.5, relativeZ + 0.5);
-                } else if (activeTile.type === 3) {
-                    maxSpeed = 3.2; 
-                    speed = Math.min(speed + 0.1, maxSpeed);
+            let nextX = carPos.x + Math.sin(angle) * speed;
+            let nextZ = carPos.z + Math.cos(angle) * speed;
+            const nextGridX = Math.round(nextX / TILE_SIZE), nextGridZ = Math.round(nextZ / TILE_SIZE);
+            let isWallBlocked = false;
+            
+            for(let lvl = 0; lvl < 10; lvl++) {
+                const blockTile = trackData[`${nextGridX},${nextGridZ},${lvl}`];
+                if(blockTile && blockTile.type === 4) {
+                    if(carPos.y >= (lvl * HEIGHT_STEP) - 0.2 && carPos.y <= (lvl * HEIGHT_STEP) + HEIGHT_STEP) isWallBlocked = true;
                 }
             }
 
-            carPos.y = THREE.MathUtils.lerp(carPos.y, targetY, 0.2);
-            carPos.x += Math.sin(angle) * speed;
-            carPos.z += Math.cos(angle) * speed;
+            if(!isWallBlocked) { carPos.x = nextX; carPos.z = nextZ; }
+            else { speed = -speed * 0.4; playSound(90, "sawtooth", 0.2, 0.25); cameraShake = 0.5; }
 
-            carGroup.position.copy(carPos);
-            carGroup.rotation.y = angle;
+            const gX = Math.round(carPos.x / TILE_SIZE), gZ = Math.round(carPos.z / TILE_SIZE);
+            let trackSurfaceY = 0.0, currentTileTypeAtCar = -1, currentTileRotationAtCar = 0;
 
-            speedoElement.innerHTML = `${Math.round(Math.abs(speed) * 140)} <span style="font-size:14px; color:#fff;">km/h</span>`;
+            for(let lvl = 0; lvl < 10; lvl++) {
+                const activeTile = trackData[`${gX},${gZ},${lvl}`];
+                if(activeTile) {
+                    let tileBaseY = 0.3 + (lvl * HEIGHT_STEP);
+                    if (activeTile.type === 0 || activeTile.type === 1) { trackSurfaceY = tileBaseY; currentTileTypeAtCar = activeTile.type; }
+                    else if (activeTile.type === 3) { maxSpeed = 3.8; speed = Math.min(speed + 0.18, maxSpeed); trackSurfaceY = tileBaseY; currentTileTypeAtCar = activeTile.type; if(Math.random()<0.3) playSound(600, "sine", 0.05, 0.2); }
+                    else if (activeTile.type === 2 || activeTile.type === 5) {
+                        let relativePosition = 0;
+                        if (activeTile.rotation === 0) relativePosition = -((carPos.z / TILE_SIZE) - gZ) + 0.5;
+                        if (activeTile.rotation === 180) relativePosition = ((carPos.z / TILE_SIZE) - gZ) + 0.5;
+                        if (activeTile.rotation === 90) relativePosition = -((carPos.x / TILE_SIZE) - gX) + 0.5;
+                        if (activeTile.rotation === 270) relativePosition = ((carPos.x / TILE_SIZE) - gX) + 0.5;
+                        trackSurfaceY = tileBaseY + (THREE.MathUtils.clamp(relativePosition, 0, 1) * HEIGHT_STEP);
+                        currentTileTypeAtCar = activeTile.type; currentTileRotationAtCar = activeTile.rotation;
+                    }
+                }
+            }
+
+            if (carPos.y > trackSurfaceY + 0.05 || yVelocity > 0) {
+                isAirborne = true; yVelocity += GRAVITY; carPos.y += yVelocity;
+                carGroup.rotation.x = THREE.MathUtils.lerp(carGroup.rotation.x, yVelocity * 1.5, 0.1);
+            } else {
+                if (isAirborne) { isAirborne = false; cameraShake = Math.abs(yVelocity) * 4; playSound(120, "triangle", 0.2, THREE.MathUtils.clamp(Math.abs(yVelocity)*2, 0, 0.5)); yVelocity = 0; }
+                carPos.y = THREE.MathUtils.lerp(carPos.y, trackSurfaceY, 0.35);
+                if ((currentTileTypeAtCar === 2 || currentTileTypeAtCar === 5) && speed > 0.6) {
+                    let exitPos = 0;
+                    if (currentTileRotationAtCar === 0) exitPos = -((carPos.z / TILE_SIZE) - gZ) + 0.5;
+                    if (currentTileRotationAtCar === 180) exitPos = ((carPos.z / TILE_SIZE) - gZ) + 0.5;
+                    if (currentTileRotationAtCar === 90) exitPos = -((carPos.x / TILE_SIZE) - gX) + 0.5;
+                    if (currentTileRotationAtCar === 270) exitPos = ((carPos.x / TILE_SIZE) - gX) + 0.5;
+                    if (exitPos > 0.90) {
+                        if (currentTileTypeAtCar === 5) { yVelocity = 0.435; speed = 2.45; playSound(580, "sawtooth", 0.3, 0.3); }
+                        else { yVelocity = 0.27; speed = 1.6; playSound(400, "square", 0.15, 0.1); }
+                        carPos.y += 0.15; 
+                    }
+                }
+                carGroup.rotation.x = THREE.MathUtils.lerp(carGroup.rotation.x, 0, 0.2);
+            }
+
+            if(maxSpeed > 2.4 && currentTileTypeAtCar !== 3) maxSpeed -= 0.03;
+            carGroup.position.copy(carPos); carGroup.rotation.y = angle;
+            speedoElement.innerHTML = `${Math.round(Math.abs(speed) * 135)} <span style="font-size:14px; color:#94a3b8;">km/h</span>`;
+            altitudeElement.innerText = `${(carPos.y * 2).toFixed(1)}m`;
         }
 
         function updateCamera() {
             if (!isBuildMode) {
-                const camBack = new THREE.Vector3(0, 5, -12).applyQuaternion(carGroup.quaternion);
-                const targetCamPos = carGroup.position.clone().add(camBack);
-                camera.position.lerp(targetCamPos, 0.1);
-                camera.lookAt(carGroup.position.clone().add(new THREE.Vector3(0,1,0)));
+                const camBack = new THREE.Vector3(0, 4.5, -11).applyQuaternion(carGroup.quaternion);
+                camera.position.lerp(carGroup.position.clone().add(camBack), 0.12);
+                camera.lookAt(carGroup.position.clone().add(new THREE.Vector3(0,0.8,0)));
             } else {
-                camera.position.set(cameraOffset.x, 80, cameraOffset.z + 40);
+                camera.position.set(cameraOffset.x, 85, cameraOffset.z + 45);
                 camera.lookAt(cameraOffset.x, 0, cameraOffset.z);
             }
         }
@@ -330,144 +749,160 @@
         function animate() {
             requestAnimationFrame(animate);
             updatePhysics();
+            processNetInterpolation(); 
             updateCamera();
             renderer.render(scene, camera);
         }
+
+        loadTrackFromData({
+            "0,0,0": {type: 0, rotation: 0, level: 0},
+            "0,-1,0": {type: 0, rotation: 0, level: 0}, 
+            "0,-2,0": {type: 5, rotation: 0, level: 0}
+        });
         animate();
 
-        // --- INTERACTIVE MOUSE MAP BUILD CONTROLS ---
+        // --- INTERACTION CONTROLS ---
         const toggleBtn = document.getElementById('toggle-mode-btn');
         const editorPanel = document.getElementById('editor-panel');
-        const modeTag = document.getElementById('mode-tag');
+        const tooltip = document.getElementById('scanner-tooltip');
 
         toggleBtn.addEventListener('click', () => {
+            if (activeRoomId && !isAdminUnlocked) { alert("🔒 Access Denied: Admin key verification protocol required."); return; }
             isBuildMode = !isBuildMode;
             if (isBuildMode) {
-                toggleBtn.innerText = "Switch to Race Mode";
-                toggleBtn.classList.add('active');
-                editorPanel.style.display = 'flex';
-                modeTag.innerText = "Building";
-                modeTag.style.color = "#00ffcc";
-                previewMesh.visible = true;
-                cameraOffset.copy(carGroup.position);
+                toggleBtn.innerText = "Switch to Race Mode"; toggleBtn.classList.add('active'); editorPanel.style.display = 'flex'; previewMesh.visible = true; cameraOffset.copy(carGroup.position); updateBuildFloorHeight(); 
             } else {
-                toggleBtn.innerText = "Switch to Build Mode";
-                toggleBtn.classList.remove('active');
-                editorPanel.style.display = 'none';
-                modeTag.innerText = "Racing";
-                modeTag.style.color = "#ff4757";
-                previewMesh.visible = false;
+                toggleBtn.innerText = "Switch to Build Mode"; toggleBtn.classList.remove('active'); editorPanel.style.display = 'none'; previewMesh.visible = false; targetMarker.visible = false; tooltip.style.display = "none";
             }
         });
 
         window.addEventListener('contextmenu', e => e.preventDefault());
+        window.addEventListener('mousedown', (e) => { if (isBuildMode && e.button === 2) { isRightDragging = true; previousMousePosition = { x: e.clientX, y: e.clientY }; } });
 
-        window.addEventListener('mousedown', (e) => {
-            if (!isBuildMode) return;
-            if (e.button === 2) { 
-                isRightDragging = true;
-                previousMousePosition = { x: e.clientX, y: e.clientY };
-            }
-        });
+        function getTargetStackLevel(gX, gZ) {
+            let blockCount = 0;
+            for(let lvl=0; lvl<10; lvl++) { if(trackData[`${gX},${gZ},${lvl}`] && trackData[`${gX},${gZ},${lvl}`].type === 4) blockCount++; }
+            return blockCount;
+        }
+
+        function updateBuildFloorHeight() { buildFloor.position.y = getTargetStackLevel(currentHoveredGrid.x, currentHoveredGrid.z) * HEIGHT_STEP; }
 
         window.addEventListener('mousemove', (e) => {
             if (!isBuildMode) return;
-
             if (isRightDragging) {
-                const deltaX = e.clientX - previousMousePosition.x;
-                const deltaY = e.clientY - previousMousePosition.y;
-                cameraOffset.x -= deltaX * 0.4;
-                cameraOffset.z -= deltaY * 0.4;
+                cameraOffset.x -= (e.clientX - previousMousePosition.x) * 0.45;
+                cameraOffset.z -= (e.clientY - previousMousePosition.y) * 0.45;
                 previousMousePosition = { x: e.clientX, y: e.clientY };
             }
 
-            mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
-            mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
-
+            mouse.x = (e.clientX / window.innerWidth) * 2 - 1; mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
             raycaster.setFromCamera(mouse, camera);
-            const intersects = raycaster.intersectObject(buildFloor);
+            let intersects = raycaster.intersectObject(buildFloor);
 
             if (intersects.length > 0) {
-                const point = intersects[0].point;
-                const gX = Math.round(point.x / TILE_SIZE);
-                const gZ = Math.round(point.z / TILE_SIZE);
-                previewMesh.position.set(gX * TILE_SIZE, 0.3, gZ * TILE_SIZE);
-            }
-        });
-
-        window.addEventListener('mouseup', (e) => {
-            if (e.button === 2) isRightDragging = false;
-        });
-
-        // Left Click to place
-        window.addEventListener('click', (e) => {
-            if (!isBuildMode || e.button !== 0 || e.target.tagName === 'BUTTON' || e.target.classList.contains('color-dot')) return;
-
-            raycaster.setFromCamera(mouse, camera);
-            const intersects = raycaster.intersectObject(buildFloor);
-
-            if (intersects.length > 0) {
-                const point = intersects[0].point;
-                const gX = Math.round(point.x / TILE_SIZE);
-                const gZ = Math.round(point.z / TILE_SIZE);
-                const key = `${gX},${gZ}`;
-
-                if (trackData[key]) {
-                    scene.remove(trackData[key].mesh);
-                    delete trackData[key];
+                let point = intersects[0].point;
+                let gX = Math.round(point.x / TILE_SIZE), gZ = Math.round(point.z / TILE_SIZE);
+                if (gX !== currentHoveredGrid.x || gZ !== currentHoveredGrid.z) {
+                    currentHoveredGrid.x = gX; currentHoveredGrid.z = gZ; updateBuildFloorHeight();
+                    intersects = raycaster.intersectObject(buildFloor);
+                    if(intersects.length > 0) { gX = Math.round(intersects[0].point.x / TILE_SIZE); gZ = Math.round(intersects[0].point.z / TILE_SIZE); }
                 }
 
-                const newMesh = createTileMesh(currentTileType, currentTileRotation);
-                newMesh.position.set(gX * TILE_SIZE, 0.3, gZ * TILE_SIZE);
-                scene.add(newMesh);
+                let targetLvl = getTargetStackLevel(gX, gZ);
+                let ghostY = 0.3 + (targetLvl * HEIGHT_STEP);
+                if (currentTileType === 4) ghostY = (targetLvl * HEIGHT_STEP) + (HEIGHT_STEP / 2);
+                previewMesh.position.set(gX * TILE_SIZE, ghostY, gZ * TILE_SIZE);
 
-                trackData[key] = { type: currentTileType, rotation: currentTileRotation, mesh: newMesh };
+                let foundRampKey = null;
+                for(let l=0; l<10; l++) { if(trackData[`${gX},${gZ},${l}`] && (trackData[`${gX},${gZ},${l}`].type === 2 || trackData[`${gX},${gZ},${l}`].type === 5)) { foundRampKey = `${gX},${gZ},${l}`; break; } }
+
+                if(foundRampKey) {
+                    let ramp = trackData[foundRampKey], blocksDistance = (ramp.type === 5) ? 5.0 : 2.0;
+                    let targetGridX = gX, targetGridZ = gZ;
+                    if(ramp.rotation === 0) targetGridZ -= blocksDistance;
+                    if(ramp.rotation === 180) targetGridZ += blocksDistance;
+                    if(ramp.rotation === 90) targetGridX -= blocksDistance;
+                    if(ramp.rotation === 270) targetGridX += blocksDistance;
+
+                    targetMarker.position.set(targetGridX * TILE_SIZE, (ramp.level * HEIGHT_STEP) + 0.1, targetGridZ * TILE_SIZE);
+                    targetMarker.visible = true;
+                    tooltip.style.left = (e.clientX + 15) + "px"; tooltip.style.top = (e.clientY + 15) + "px"; tooltip.style.display = "block";
+                    tooltip.innerHTML = `🎯 <b>LOCKED LANDING ARC</b><br>ARC DISTANCE: <b>${blocksDistance} Blocks</b>`;
+                } else { targetMarker.visible = false; tooltip.style.display = "none"; }
             }
         });
 
-        // --- IMPORT / EXPORT DATA ENGINE ---
+        window.addEventListener('mouseup', (e) => { if (e.button === 2) isRightDragging = false; });
+
+        function runFusionCheck(gX, gZ, lvl) {
+            const currentKey = `${gX},${gZ},${lvl}`; if (!trackData[currentKey]) return;
+            const neighbors = [{ dx: 0, dz: 1 }, { dx: 0, dz: -1 }, { dx: 1, dz: 0 }, { dx: -1, dz: 0 }];
+            let me = trackData[currentKey];
+
+            if (me.type === 2) {
+                for (let n of neighbors) {
+                    let nKey = `${gX + n.dx},${gZ + n.dz},${lvl}`;
+                    if (trackData[nKey] && trackData[nKey].type === 3) { mutateTile(gX, gZ, lvl, 5, me.rotation); mutateTile(gX + n.dx, gZ + n.dz, lvl, 0, trackData[nKey].rotation); playSound(490, "sine", 0.2, 0.25); break; }
+                }
+            }
+            if (me.type === 3) {
+                for (let n of neighbors) {
+                    let nKey = `${gX + n.dx},${gZ + n.dz},${lvl}`;
+                    if (trackData[nKey] && trackData[nKey].type === 2) { mutateTile(gX, gZ, lvl, 0, me.rotation); mutateTile(gX + n.dx, gZ + n.dz, lvl, 5, trackData[nKey].rotation); playSound(490, "sine", 0.2, 0.25); break; }
+                }
+            }
+        }
+
+        function mutateTile(gX, gZ, lvl, newType, targetRotation) {
+            const k = `${gX},${gZ},${lvl}`; if(trackData[k]) scene.remove(trackData[k].mesh);
+            const upgradedMesh = createTileMesh(newType, targetRotation);
+            let yPos = 0.3 + (lvl * HEIGHT_STEP); if (newType === 4) yPos = (lvl * HEIGHT_STEP);
+            upgradedMesh.position.set(gX * TILE_SIZE, yPos, gZ * TILE_SIZE); scene.add(upgradedMesh);
+            trackData[k] = { type: newType, rotation: targetRotation, level: lvl, mesh: upgradedMesh };
+        }
+
+        window.addEventListener('click', (e) => {
+            if (!isBuildMode || e.button !== 0 || e.target.tagName === 'BUTTON' || e.target.classList.contains('color-dot') || e.target.tagName === 'INPUT' || e.target.closest('#mobile-hud-overlay')) return;
+            raycaster.setFromCamera(mouse, camera); const intersects = raycaster.intersectObject(buildFloor);
+
+            if (intersects.length > 0) {
+                const point = intersects[0].point; const gX = Math.round(point.x / TILE_SIZE), gZ = Math.round(point.z / TILE_SIZE);
+                let targetLvl = getTargetStackLevel(gX, gZ); const targetKey = `${gX},${gZ},${targetLvl}`;
+
+                if (trackData[targetKey]) { scene.remove(trackData[targetKey].mesh); delete trackData[targetKey]; }
+                const newMesh = createTileMesh(currentTileType, currentTileRotation);
+                let yPos = 0.3 + (targetLvl * HEIGHT_STEP); if (currentTileType === 4) yPos = (targetLvl * HEIGHT_STEP);
+
+                newMesh.position.set(gX * TILE_SIZE, yPos, gZ * TILE_SIZE); scene.add(newMesh);
+                trackData[targetKey] = { type: currentTileType, rotation: currentTileRotation, level: targetLvl, mesh: newMesh };
+                playSound(300, "triangle", 0.08, 0.1); runFusionCheck(gX, gZ, targetLvl); updateBuildFloorHeight(); 
+                if (activeRoomId && isAdminUnlocked) broadcastTrackAlteration();
+            }
+        });
+
+        // --- EXPORT / IMPORT PORTS ---
         document.getElementById('export-btn').addEventListener('click', () => {
             const saveObject = {};
-            Object.keys(trackData).forEach(key => {
-                saveObject[key] = {
-                    type: trackData[key].type,
-                    rotation: trackData[key].rotation
-                };
-            });
-
-            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(saveObject));
+            Object.keys(trackData).forEach(key => { saveObject[key] = { type: trackData[key].type, rotation: trackData[key].rotation, level: trackData[key].level }; });
             const downloadAnchor = document.createElement('a');
-            downloadAnchor.setAttribute("href", dataStr);
-            downloadAnchor.setAttribute("download", "custom_polytrack.json");
-            document.body.appendChild(downloadAnchor);
-            downloadAnchor.click();
-            downloadAnchor.remove();
+            downloadAnchor.setAttribute("href", "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(saveObject)));
+            downloadAnchor.setAttribute("download", "polytrack_perfect_grid.json"); document.body.appendChild(downloadAnchor); downloadAnchor.click(); downloadAnchor.remove();
         });
 
         const fileInput = document.getElementById('file-input');
         document.getElementById('import-btn').addEventListener('click', () => fileInput.click());
-        
         fileInput.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-
+            const file = e.target.files[0]; if (!file) return;
             const reader = new FileReader();
             reader.onload = function(event) {
-                try {
-                    const parsedData = JSON.parse(event.target.result);
-                    loadTrackFromData(parsedData);
-                    resetCar();
-                } catch(err) {
-                    alert("Error reading track file. Make sure it's a valid track json!");
-                }
+                try { loadTrackFromData(JSON.parse(event.target.result)); resetCar(); if(activeRoomId && isAdminUnlocked) broadcastTrackAlteration(); } 
+                catch(err) { alert("Invalid track file format."); }
             };
             reader.readAsText(file);
         });
 
-        // UI Dashboard labels
         const tileNameLabel = document.getElementById('tile-name');
         function updatePreview() { tileNameLabel.innerText = `${tileTypes[currentTileType].name} (${currentTileRotation}°)`; }
-
         document.getElementById('next-tile').addEventListener('click', () => { currentTileType = (currentTileType + 1) % tileTypes.length; updatePreview(); });
         document.getElementById('prev-tile').addEventListener('click', () => { currentTileType = (currentTileType - 1 + tileTypes.length) % tileTypes.length; updatePreview(); });
         document.getElementById('rotate-tile').addEventListener('click', () => { currentTileRotation = (currentTileRotation + 90) % 360; updatePreview(); });
@@ -475,16 +910,11 @@
         document.querySelectorAll('.color-dot').forEach(dot => {
             dot.addEventListener('click', (e) => {
                 document.querySelectorAll('.color-dot').forEach(d => d.classList.remove('selected'));
-                e.target.classList.add('selected');
-                buildCar(parseInt(e.target.getAttribute('data-color'), 16));
+                e.target.classList.add('selected'); buildCar(parseInt(e.target.getAttribute('data-color'), 16));
             });
         });
 
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
+        window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
     </script>
 </body>
 </html>
